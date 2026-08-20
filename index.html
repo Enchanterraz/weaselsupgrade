@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RH Pixel Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  /* Milk ground, deep green ink. The chain's own electric green is held back
+     and used only where the chain is actually doing something — live counts,
+     the mint button, a confirmed transaction. Everything else is calm sage, so
+     the bright green always means something rather than just decorating. */
+  :root{
+    --ground:#FCFAF4; --panel:#F5F2E7; --panel-2:#EDEADC;
+    --line:#C6DACD; --line-soft:#DCE8E0;
+    --ink:#14392B; --ink-2:#2E6B52; --dim:#4A7561;
+    --rh:#00C805; --rh-deep:#00A804; --rh-text:#077A08;
+    --warn:#96570C; --bad:#B0392C;
+    --cell:9px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--ground);color:var(--ink);
+       font:400 15px/1.55 "Bricolage Grotesque",system-ui,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  .mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+
+  #boot{padding:14px 24px;background:#FDF0EC;border-bottom:1px solid #E8B9AE;
+        font:400 14px/1.5 system-ui,sans-serif;color:#8C2E22}
+
+  header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+         padding:16px 24px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .wordmark{font-family:"Silkscreen",monospace;font-size:18px;letter-spacing:.02em;color:var(--ink)}
+  .tagline{color:var(--dim);font-size:13px}
+  header .spacer{flex:1}
+  .counter{font-family:"JetBrains Mono",monospace;font-size:13px;color:var(--dim)}
+  .counter b{color:var(--ink);font-weight:700}
+  .live-dot{display:inline-block;width:7px;height:7px;border-radius:50%;
+            background:var(--rh);margin-right:6px;vertical-align:middle;
+            box-shadow:0 0 0 3px rgba(0,200,5,.18)}
+
+  .setup{display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+         padding:13px 24px;border-bottom:1px solid var(--line-soft)}
+  .setup input[type=text]{flex:1;min-width:min(400px,100%);background:#fff;
+    border:1px solid var(--line);border-radius:7px;color:var(--ink);padding:9px 12px;
+    font-family:"JetBrains Mono",monospace;font-size:13px}
+  .setup input[type=text]:focus{outline:2px solid var(--rh);outline-offset:-1px;border-color:var(--rh)}
+  .setup label{font-size:13px;color:var(--dim);display:flex;align-items:center;gap:5px}
+  .setup button{font:600 13px/1 "Bricolage Grotesque",sans-serif;padding:10px 18px;border-radius:7px;
+    border:1px solid var(--ink);background:var(--ink);color:var(--ground);cursor:pointer}
+  .setup button:hover{background:var(--ink-2);border-color:var(--ink-2)}
+
+  main{display:grid;grid-template-columns:minmax(0,1fr) 272px;gap:30px;
+       padding:26px 24px;max-width:1100px;margin:0 auto;align-items:start}
+  @media (max-width:880px){ main{grid-template-columns:1fr} }
+
+  .stage{display:flex;flex-direction:column;gap:15px;min-width:0}
+  .board-wrap{position:relative;width:calc(var(--cell)*64);max-width:100%;
+    border:2px solid var(--line);border-radius:10px;overflow:hidden;
+    box-shadow:0 1px 0 #fff inset, 0 6px 20px -14px rgba(20,57,43,.5)}
+  .board{width:100%;aspect-ratio:1;image-rendering:pixelated;cursor:crosshair;
+    touch-action:none;display:block}
+  .grid-overlay{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .15s;
+    background-image:
+      repeating-linear-gradient(to right, rgba(20,57,43,.14) 0 1px, transparent 1px 12.5%),
+      repeating-linear-gradient(to bottom, rgba(20,57,43,.14) 0 1px, transparent 1px 12.5%)}
+  .grid-overlay.on{opacity:1}
+  .sym-axis{position:absolute;top:0;bottom:0;left:50%;width:1px;pointer-events:none;
+    background:repeating-linear-gradient(to bottom, var(--rh) 0 6px, transparent 6px 12px);
+    opacity:0;transition:opacity .15s}
+  .sym-axis.on{opacity:.55}
+
+  /* The contract stores drawings as colour runs and caps them at 2048. That
+     budget is invisible until a mint reverts, so it goes on screen. */
+  .meter{border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:13px 15px}
+  .meter-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:9px}
+  .meter-label{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);font-weight:600}
+  .meter-read{font-family:"JetBrains Mono",monospace;font-size:13px;color:var(--ink)}
+  .track{position:relative;height:8px;background:var(--panel-2);border-radius:99px;overflow:hidden}
+  .fill{height:100%;width:0;background:var(--rh);transition:width .12s linear,background .2s}
+  .tick{position:absolute;top:-3px;width:1px;height:14px;background:var(--dim);opacity:.5}
+  .meter-note{margin:9px 0 0;font-size:13px;color:var(--dim);min-height:1.4em}
+  .meter-note.bad{color:var(--bad);font-weight:600} .meter-note.warn{color:var(--warn);font-weight:600}
+
+  aside{display:flex;flex-direction:column;gap:20px}
+  .group-label{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);
+               margin:0 0 9px;font-weight:600}
+
+  .swatches{display:grid;grid-template-columns:repeat(8,1fr);gap:5px}
+  .sw{aspect-ratio:1;border:1px solid rgba(20,57,43,.18);border-radius:5px;cursor:pointer;padding:0;
+      transition:transform .1s}
+  .sw:hover{transform:scale(1.09)}
+  .sw[aria-pressed="true"]{outline:2.5px solid var(--ink);outline-offset:2px;z-index:1}
+
+  .tools{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+  button.t{font:500 13px/1 "Bricolage Grotesque",sans-serif;color:var(--ink);background:#fff;
+    border:1px solid var(--line);border-radius:7px;padding:10px 9px;cursor:pointer;text-align:left}
+  button.t[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--ground)}
+  button.t[aria-pressed="true"] kbd{color:rgba(252,250,244,.65)}
+  button.t:hover:not([aria-pressed="true"]){border-color:var(--ink-2)}
+  button.t kbd{float:right;color:var(--dim);font-family:"JetBrains Mono",monospace;font-size:11px}
+
+  .sizes{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+  .size{aspect-ratio:1;display:grid;place-items:center;background:#fff;border:1px solid var(--line);
+        border-radius:7px;cursor:pointer;padding:0}
+  .size i{display:block;background:var(--ink);border-radius:1px}
+  .size[aria-pressed="true"]{background:var(--ink);border-color:var(--ink)}
+  .size[aria-pressed="true"] i{background:var(--ground)}
+  .size:hover:not([aria-pressed="true"]){border-color:var(--ink-2)}
+
+  .btn{display:block;width:100%;font:700 14px/1 "Bricolage Grotesque",sans-serif;padding:14px;
+    border-radius:8px;border:1px solid var(--rh-deep);background:var(--rh);color:#06331A;cursor:pointer;
+    box-shadow:0 2px 0 rgba(0,140,4,.35)}
+  .btn:hover:not(:disabled){background:var(--rh-deep);color:#fff}
+  .btn:disabled{background:var(--panel-2);color:var(--dim);border-color:var(--line);
+    cursor:not-allowed;box-shadow:none}
+  .btn.ghost{background:#fff;color:var(--ink);border-color:var(--ink);box-shadow:none}
+  .btn.ghost:hover{background:var(--panel)}
+
+  .status{font-size:13px;color:var(--dim);min-height:2.6em;word-break:break-word;white-space:pre-wrap}
+  .status a{color:var(--ink-2)}
+  .status.err{color:var(--bad)}
+  .status.good{color:var(--rh-text);font-weight:600}
+
+  .modes{display:flex;gap:4px;border:1px solid var(--line);border-radius:8px;padding:4px;background:var(--panel)}
+  .modes button{flex:1;font:600 13px/1 "Bricolage Grotesque",sans-serif;padding:9px;border:0;
+    border-radius:5px;background:transparent;color:var(--dim);cursor:pointer}
+  .modes button[aria-pressed="true"]{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(20,57,43,.12)}
+
+  .field{display:flex;gap:6px;margin-top:8px}
+  .field input{width:100%;background:#fff;border:1px solid var(--line);border-radius:7px;
+    color:var(--ink);padding:10px;font-family:"JetBrains Mono",monospace;font-size:13px}
+  .field input:focus{outline:2px solid var(--rh);outline-offset:-1px}
+  .hint{font-size:12.5px;color:var(--dim);margin-top:8px}
+  .soldout{border:1px solid var(--line);background:var(--panel);border-radius:8px;
+    padding:14px;font-size:13px;color:var(--dim)}
+  [hidden]{display:none !important}
+  @media (prefers-reduced-motion:reduce){*{transition:none !important}}
+</style>
+</head>
+<body>
+
+<div id="boot">Starting up&hellip; if this stays on screen, the page could not load its blockchain library. The reason will appear here.</div>
+
+<header>
+  <span class="wordmark">RH PIXEL STUDIO</span>
+  <span class="tagline">64&times;64. Drawn here, stored on chain.</span>
+  <span class="spacer"></span>
+  <span class="counter mono" id="supply">no contract loaded</span>
+</header>
+
+<div class="setup">
+  <input type="text" id="addr" placeholder="contract address (0x…)" spellcheck="false" autocomplete="off">
+  <label><input type="checkbox" id="mainnet"> mainnet</label>
+  <button id="loadBtn">Load contract</button>
+</div>
+
+<main>
+  <section class="stage">
+    <div class="board-wrap">
+      <canvas class="board" id="board" width="64" height="64" aria-label="Drawing canvas, 64 by 64 pixels"></canvas>
+      <div class="grid-overlay" id="gridOverlay"></div>
+      <div class="sym-axis" id="symAxis"></div>
+    </div>
+    <div class="meter">
+      <div class="meter-top">
+        <span class="meter-label">Compression budget</span>
+        <span class="meter-read mono"><b id="runs">0</b> <span style="color:var(--dim)">/ 2048 runs</span></span>
+      </div>
+      <div class="track"><div class="fill" id="fill"></div><div class="tick" id="tickMin"></div></div>
+      <p class="meter-note" id="note"></p>
+    </div>
+  </section>
+
+  <aside>
+    <div class="modes" role="group" aria-label="Mode">
+      <button id="modeMint" aria-pressed="true">Mint</button>
+      <button id="modeForge" aria-pressed="false">Forge</button>
+    </div>
+
+    <div>
+      <p class="group-label">Palette</p>
+      <div class="swatches" id="swatches"></div>
+    </div>
+
+    <div>
+      <p class="group-label">Pencil size</p>
+      <div class="sizes" id="sizes"></div>
+    </div>
+
+    <div>
+      <p class="group-label">Tools</p>
+      <div class="tools">
+        <button class="t" id="tPencil" aria-pressed="true">Pencil<kbd>B</kbd></button>
+        <button class="t" id="tFill" aria-pressed="false">Fill<kbd>G</kbd></button>
+        <button class="t" id="tPick" aria-pressed="false">Pick<kbd>I</kbd></button>
+        <button class="t" id="tUndo">Undo<kbd>Z</kbd></button>
+      </div>
+      <div class="tools" style="margin-top:6px">
+        <button class="t" id="tGrid" aria-pressed="false">Grid<kbd>#</kbd></button>
+        <button class="t" id="tSym" aria-pressed="false">Mirror<kbd>M</kbd></button>
+      </div>
+      <div class="tools" style="margin-top:6px">
+        <button class="t" id="tClear">Clear</button>
+        <button class="t" id="tPng">Save PNG</button>
+      </div>
+    </div>
+
+    <div id="mintPane">
+      <button class="btn ghost" id="connect">Connect wallet</button>
+      <button class="btn" id="mint" hidden disabled style="margin-top:8px">Mint this drawing</button>
+      <p class="hint" id="feeHint" hidden></p>
+      <div class="soldout" id="soldout" hidden>
+        Every piece is minted. Switch to Forge to redraw one you own.
+      </div>
+    </div>
+
+    <div id="forgePane" hidden>
+      <button class="btn ghost" id="connect2">Connect wallet</button>
+      <p class="group-label" style="margin-top:18px">Burn one, redraw the other</p>
+      <div class="field">
+        <input id="keepId" inputmode="numeric" placeholder="keep #" aria-label="Token to keep and redraw">
+        <input id="burnId" inputmode="numeric" placeholder="burn #" aria-label="Token to burn">
+      </div>
+      <p class="hint">You must own both. The kept piece takes the drawing on the left; the other is destroyed and supply drops by one.</p>
+      <button class="btn" id="forge" style="margin-top:10px" disabled>Forge</button>
+    </div>
+
+    <p class="status" id="status"></p>
+  </aside>
+</main>
+
+<script>
+window.addEventListener("error", e => {
+  const b = document.getElementById("boot");
+  if (b){ b.hidden = false; b.textContent = "Script error: " + (e.message || e.error); }
+});
+window.addEventListener("unhandledrejection", e => {
+  const b = document.getElementById("boot");
+  if (b){ b.hidden = false; b.textContent = "Failed: " + (e.reason?.message || e.reason); }
+});
+</script>
+
+<script type="module">
+/* ethers comes from a CDN. A failed module import kills the whole script
+   silently, which looks identical to "the page is broken", so try several
+   sources and report the failure on the page. */
+const SOURCES = [
+  "https://cdn.jsdelivr.net/npm/ethers@6.13.4/+esm",
+  "https://esm.sh/ethers@6.13.4",
+  "https://unpkg.com/ethers@6.13.4/dist/ethers.min.js"
+];
+const boot = document.getElementById("boot");
+let ethers = null; const tried = [];
+for (const url of SOURCES){
+  try{
+    boot.textContent = "Loading blockchain library from " + new URL(url).host + " …";
+    const mod = await import(url);
+    ethers = mod.ethers ?? mod;
+    if (ethers && ethers.JsonRpcProvider) break;
+    ethers = null; tried.push(new URL(url).host + " (loaded but unusable)");
+  } catch(e){ tried.push(new URL(url).host + " (" + (e.message || "blocked") + ")"); }
+}
+if (!ethers){
+  boot.innerHTML = "<b>Could not load the blockchain library.</b><br>Tried: " + tried.join("; ") +
+    "<br><br>This is a network problem, not a problem with your contract. " +
+    "You can still draw and save a PNG, but not mint.";
+} else { boot.hidden = true; }
+
+/* ------------------------------------------------------------------ config */
+const NET = {
+  testnet:{ chainId:"0xB626", chainName:"Robinhood Chain Testnet",
+    nativeCurrency:{name:"Ether",symbol:"ETH",decimals:18},
+    rpcUrls:["https://rpc.testnet.chain.robinhood.com"],
+    blockExplorerUrls:["https://explorer.testnet.chain.robinhood.com"] },
+  mainnet:{ chainId:"0x1237", chainName:"Robinhood Chain",
+    nativeCurrency:{name:"Ether",symbol:"ETH",decimals:18},
+    rpcUrls:["https://rpc.mainnet.chain.robinhood.com"],
+    blockExplorerUrls:["https://explorer.mainnet.chain.robinhood.com"] }
+};
+const ABI = [
+  "function mint(bytes art) payable returns (uint256)",
+  "function forge(uint256 keepId, uint256 burnId, bytes art) payable",
+  "function MINT_FEE() view returns (uint256)",
+  "function FORGE_FEE() view returns (uint256)",
+  "function MAX_SUPPLY() view returns (uint256)",
+  "function liveSupply() view returns (uint256)",
+  "function remaining() view returns (uint256)",
+  "function mintOpen() view returns (bool)",
+  "function forgeOpen() view returns (bool)",
+  "function name() view returns (string)"
+];
+/* Must match the contract's palette exactly — index order is what gets stored. */
+const PALETTE = ["#0E0D17","#23203A","#3F3A63","#6B5F9E","#A394D6","#D9D2F2",
+                 "#FFFFFF","#F5E0B8","#E0A860","#B06A3A","#6E3A2C","#D94F4F",
+                 "#F2A03D","#F5D94A","#5FA85A","#3D7A8C"];
+const GRID = 64, PIXELS = 4096, MIN_RUNS = 24, MAX_RUNS = 2048;
+
+/* ----------------------------------------------------------------- encoder */
+/* 2 bytes per run, big-endian: (runLength-1)<<4 | colour, reading order,
+   summing to exactly 4096. Verified against the contract in Interop.t.sol. */
+function encodeArt(px){
+  const out = []; let i = 0;
+  while (i < PIXELS){
+    const c = px[i] & 0x0f; let n = 1;
+    while (i + n < PIXELS && (px[i+n] & 0x0f) === c) n++;
+    const word = ((n - 1) << 4) | c;
+    out.push((word >> 8) & 0xff, word & 0xff);
+    i += n;
+  }
+  return Uint8Array.from(out);
+}
+const runCount = px => encodeArt(px).length / 2;
+const toHex = b => "0x" + [...b].map(x => x.toString(16).padStart(2,"0")).join("");
+
+/* -------------------------------------------------------------- drawing --- */
+const $ = id => document.getElementById(id);
+const board = $("board"), ctx = board.getContext("2d",{willReadFrequently:true});
+let px = new Uint8Array(PIXELS).fill(5);
+let colour = 0, tool = "pencil", drawing = false;
+let brush = 1, mirror = false;
+const undoStack = [];
+
+function paintAll(){
+  const img = ctx.createImageData(GRID, GRID);
+  for (let i = 0; i < PIXELS; i++){
+    const h = PALETTE[px[i]];
+    img.data[i*4]   = parseInt(h.slice(1,3),16);
+    img.data[i*4+1] = parseInt(h.slice(3,5),16);
+    img.data[i*4+2] = parseInt(h.slice(5,7),16);
+    img.data[i*4+3] = 255;
+  }
+  ctx.putImageData(img,0,0);
+  updateMeter();
+}
+function pushUndo(){ undoStack.push(px.slice()); if (undoStack.length > 60) undoStack.shift(); }
+
+function bucket(start, target){
+  if (px[start] === target) return;
+  const from = px[start], q = [start];
+  while (q.length){
+    const i = q.pop();
+    if (px[i] !== from) continue;
+    px[i] = target;
+    const x = i % GRID;
+    if (x > 0) q.push(i-1);
+    if (x < GRID-1) q.push(i+1);
+    if (i >= GRID) q.push(i-GRID);
+    if (i < PIXELS-GRID) q.push(i+GRID);
+  }
+}
+function dot(x,y){ if (x>=0 && y>=0 && x<GRID && y<GRID) px[y*GRID+x] = colour; }
+/* A square nib of the chosen width, centred as evenly as an integer grid allows. */
+function plot(x,y){
+  const half = (brush - 1) >> 1;
+  for (let dy = -half; dy < brush - half; dy++)
+    for (let dx = -half; dx < brush - half; dx++){
+      dot(x+dx, y+dy);
+      if (mirror) dot(GRID-1-(x+dx), y+dy);
+    }
+}
+/* A pointer reports its position only every so often, so a drag arrives as a
+   handful of scattered points. Without joining them a stroke records as
+   disconnected specks, so every gap is filled with Bresenham. */
+function stroke(x0,y0,x1,y1){
+  const dx = Math.abs(x1-x0), sx = x0<x1?1:-1;
+  const dy = -Math.abs(y1-y0), sy = y0<y1?1:-1;
+  let err = dx+dy;
+  for(;;){
+    plot(x0,y0);
+    if (x0===x1 && y0===y1) break;
+    const e2 = 2*err;
+    if (e2 >= dy){ err += dy; x0 += sx; }
+    if (e2 <= dx){ err += dx; y0 += sy; }
+  }
+}
+const coords = e => {
+  const r = board.getBoundingClientRect();
+  return [Math.floor((e.clientX-r.left)/r.width*GRID),
+          Math.floor((e.clientY-r.top)/r.height*GRID)];
+};
+let lastX = -1, lastY = -1;
+
+board.addEventListener("pointerdown", e => {
+  e.preventDefault(); board.setPointerCapture(e.pointerId);
+  const [x,y] = coords(e);
+  if (x < 0 || y < 0 || x >= GRID || y >= GRID) return;
+  pushUndo(); drawing = true;
+  if (tool === "pick"){ setColour(px[y*GRID+x]); setTool("pencil"); drawing = false; return; }
+  if (tool === "fill"){
+    bucket(y*GRID+x, colour);
+    if (mirror) bucket(y*GRID + (GRID-1-x), colour);
+    paintAll(); lastX = lastY = -1; return;
+  }
+  plot(x,y); lastX = x; lastY = y; paintAll();
+});
+board.addEventListener("pointermove", e => {
+  if (!drawing || tool !== "pencil") return;
+  const [x,y] = coords(e);
+  if (x === lastX && y === lastY) return;
+  if (lastX >= 0) stroke(lastX,lastY,x,y); else plot(x,y);
+  lastX = x; lastY = y; paintAll();
+});
+const endStroke = () => { drawing = false; lastX = lastY = -1; };
+board.addEventListener("pointerup", endStroke);
+board.addEventListener("pointercancel", endStroke);
+board.addEventListener("pointerleave", endStroke);
+
+/* ------------------------------------------------------------ the meter --- */
+$("tickMin").style.left = (MIN_RUNS/MAX_RUNS*100) + "%";
+let currentRuns = 0;
+function updateMeter(){
+  const r = runCount(px);
+  currentRuns = r;
+  $("runs").textContent = r;
+  $("fill").style.width = Math.min(100, r/MAX_RUNS*100) + "%";
+  let state = "ok", msg = "";
+  if (r < MIN_RUNS){ state="bad"; msg = `Too plain to mint. Needs at least ${MIN_RUNS} colour runs — keep drawing.`; }
+  else if (r > MAX_RUNS){ state="bad"; msg = `Too busy to mint. ${r} runs, and the chain accepts ${MAX_RUNS}. Simplify some fine texture.`; }
+  else if (r > MAX_RUNS*0.85){ state="warn"; msg = `Close to the limit. ${MAX_RUNS-r} runs of detail left.`; }
+  else { msg = `About ${(r*2/1024).toFixed(1)} KB on chain.`; }
+  $("fill").style.background = state==="bad" ? "var(--bad)" : state==="warn" ? "var(--warn)" : "var(--rh)";
+  $("note").className = "meter-note " + (state==="ok" ? "" : state);
+  $("note").textContent = msg;
+  refreshActions();
+}
+const artValid = () => currentRuns >= MIN_RUNS && currentRuns <= MAX_RUNS;
+
+/* ------------------------------------------------------------- controls --- */
+const swatches = $("swatches");
+PALETTE.forEach((hex,i) => {
+  const b = document.createElement("button");
+  b.className = "sw"; b.style.background = hex;
+  b.setAttribute("aria-pressed", String(i === colour));
+  b.setAttribute("aria-label", "Colour " + (i+1));
+  b.onclick = () => setColour(i);
+  swatches.appendChild(b);
+});
+function setColour(i){ colour = i;
+  [...swatches.children].forEach((b,k) => b.setAttribute("aria-pressed", String(k===i))); }
+
+const sizes = $("sizes");
+[1,2,3,4].forEach(n => {
+  const b = document.createElement("button");
+  b.className = "size";
+  b.setAttribute("aria-pressed", String(n === brush));
+  b.setAttribute("aria-label", n + " pixel pencil");
+  b.title = n + "px";
+  const i = document.createElement("i");
+  i.style.width = i.style.height = (n * 3 + 2) + "px";
+  b.appendChild(i);
+  b.onclick = () => setBrush(n);
+  sizes.appendChild(b);
+});
+function setBrush(n){ brush = n;
+  [...sizes.children].forEach((b,k) => b.setAttribute("aria-pressed", String(k+1===n))); }
+
+function setTool(t){ tool = t;
+  for (const [id,n] of [["tPencil","pencil"],["tFill","fill"],["tPick","pick"]])
+    $(id).setAttribute("aria-pressed", String(n===t)); }
+$("tPencil").onclick = () => setTool("pencil");
+$("tFill").onclick   = () => setTool("fill");
+$("tPick").onclick   = () => setTool("pick");
+$("tUndo").onclick   = () => { const p = undoStack.pop(); if (p){ px = p; paintAll(); } };
+$("tGrid").onclick   = () => {
+  const on = $("gridOverlay").classList.toggle("on");
+  $("tGrid").setAttribute("aria-pressed", String(on));
+};
+$("tSym").onclick    = () => {
+  mirror = !mirror;
+  $("symAxis").classList.toggle("on", mirror);
+  $("tSym").setAttribute("aria-pressed", String(mirror));
+};
+$("tClear").onclick  = () => { pushUndo(); px = new Uint8Array(PIXELS).fill(5); paintAll(); };
+$("tPng").onclick    = () => {
+  const c = document.createElement("canvas"); c.width = c.height = 512;
+  const g = c.getContext("2d"); g.imageSmoothingEnabled = false;
+  g.drawImage(board,0,0,512,512);
+  const a = document.createElement("a"); a.download = "rh-pixel-studio.png"; a.href = c.toDataURL(); a.click();
+};
+addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT") return;
+  if (e.key === "b") setTool("pencil");
+  if (e.key === "g") setTool("fill");
+  if (e.key === "i") setTool("pick");
+  if (e.key === "m") $("tSym").click();
+  if (e.key === "#" || e.key === "3") $("tGrid").click();
+  if (e.key >= "1" && e.key <= "4" && !e.ctrlKey && !e.metaKey && e.key !== "3") setBrush(+e.key);
+  if (e.key === "z" && (e.metaKey || e.ctrlKey)){ e.preventDefault(); $("tUndo").click(); }
+});
+
+/* ------------------------------------------------------------- the chain -- */
+const statusEl = $("status");
+let signer, contract, fees = {}, open = {mint:false, forge:false}, addr = "";
+const say = (m, kind="") => { statusEl.textContent = m; statusEl.className = "status " + kind; };
+const net = () => $("mainnet").checked ? NET.mainnet : NET.testnet;
+
+function refreshActions(){
+  const ok = signer && artValid();
+  $("mint").disabled  = !(ok && open.mint);
+  $("forge").disabled = !(ok && open.forge && $("keepId").value && $("burnId").value);
+}
+try { $("addr").value = localStorage.getItem("rhstudio_addr") || ""; } catch {}
+
+$("loadBtn").onclick = async () => {
+  addr = $("addr").value.trim();
+  if (!ethers) return say("Blockchain library unavailable — see the message at the top.", "err");
+  if (!ethers.isAddress(addr)) return say("That doesn't look like a contract address.", "err");
+  try { localStorage.setItem("rhstudio_addr", addr); } catch {}
+  await readState();
+};
+
+async function readState(){
+  if (!addr) return;
+  try{
+    const c = new ethers.Contract(addr, ABI, new ethers.JsonRpcProvider(net().rpcUrls[0]));
+    const [nm, live, max, rem, mOpen, fOpen, mFee, fFee] = await Promise.all([
+      c.name(), c.liveSupply(), c.MAX_SUPPLY(), c.remaining(),
+      c.mintOpen(), c.forgeOpen(), c.MINT_FEE(), c.FORGE_FEE()
+    ]);
+    fees = {mint:mFee, forge:fFee};
+    open = {mint:mOpen, forge:fOpen};
+    $("supply").innerHTML = `<span class="live-dot"></span>${nm} &nbsp;·&nbsp; <b>${live}</b> of ${max} live &nbsp;·&nbsp; <b>${rem}</b> left to mint`;
+    $("feeHint").textContent = ethers.formatEther(mFee) + " ETH plus gas.";
+    $("feeHint").hidden = !mOpen;
+    $("soldout").hidden = mOpen;
+    $("mint").hidden = !mOpen;
+    if (signer) contract = new ethers.Contract(addr, ABI, signer);
+    say(fOpen ? "Contract loaded. " + (mOpen ? "Minting and forging are open." : "Mint closed, forging is open.")
+              : "Contract loaded. Forging opens once the mint sells out.");
+    refreshActions();
+  } catch(e){
+    say("Couldn't read that contract. Check the address and that the mainnet box matches where you deployed.\n" + (e?.shortMessage ?? ""), "err");
+  }
+}
+
+async function connect(){
+  if (!ethers) return say("Blockchain library unavailable — see the message at the top.", "err");
+  if (!window.ethereum) return say("No wallet found. Install MetaMask to mint.", "err");
+  if (!addr) return say("Load a contract address first.", "err");
+  try{
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    await provider.send("eth_requestAccounts", []);
+    const n = net();
+    const chain = await provider.send("eth_chainId", []);
+    if (chain.toLowerCase() !== n.chainId.toLowerCase()){
+      try { await provider.send("wallet_switchEthereumChain", [{chainId:n.chainId}]); }
+      catch { await provider.send("wallet_addEthereumChain", [n]); }
+    }
+    signer = await provider.getSigner();
+    contract = new ethers.Contract(addr, ABI, signer);
+    const a = await signer.getAddress();
+    $("connect").textContent = $("connect2").textContent = a.slice(0,6) + "…" + a.slice(-4);
+    say("Connected on " + n.chainName + ".", "good");
+    refreshActions();
+  } catch(e){ say(reason(e), "err"); }
+}
+$("connect").onclick = connect;
+$("connect2").onclick = connect;
+
+/* Contract errors arrive as selectors; translate the actionable ones. */
+function reason(e){
+  const s = JSON.stringify(e?.info ?? e?.message ?? e ?? "");
+  if (/SoldOut/.test(s))      return "Every piece is minted. Switch to Forge.";
+  if (/WrongFee/.test(s))     return "The fee must be exact. Press Load contract again to re-read it.";
+  if (/WalletLimit/.test(s))  return "This wallet has minted its limit.";
+  if (/DuplicateArt/.test(s)) return "This exact drawing already exists. Change a pixel.";
+  if (/MalformedArt/.test(s)) return "The chain rejected this drawing's detail level.";
+  if (/NotHolder/.test(s))    return "You don't own both of those tokens.";
+  if (/SameToken/.test(s))    return "Pick two different tokens.";
+  if (/Cooling/.test(s))      return "That piece changed hands recently. Forging unlocks 10 minutes after a transfer.";
+  if (/SupplyFloor/.test(s))  return "Supply has reached the floor. No more forging.";
+  if (/ForgeClosed/.test(s))  return "Forging opens once the mint sells out.";
+  if (/insufficient funds/i.test(s)) return "Not enough ETH for the fee and gas.";
+  if (/user rejected|ACTION_REJECTED/i.test(s)) return "Cancelled.";
+  return "Transaction failed. " + (e?.shortMessage ?? "");
+}
+
+async function send(label, fn){
+  try{
+    say(label + "… confirm in your wallet.");
+    const tx = await fn();
+    say(label + "… waiting for the chain.");
+    const r = await tx.wait();
+    statusEl.innerHTML = `Done. <a href="${net().blockExplorerUrls[0]}/tx/${r.hash}" target="_blank" rel="noopener">View transaction</a>`;
+    statusEl.className = "status good";
+    await readState();
+  } catch(e){ say(reason(e), "err"); }
+}
+$("mint").onclick = () => send("Minting", () => contract.mint(toHex(encodeArt(px)), {value:fees.mint}));
+$("forge").onclick = () => send("Forging", () =>
+  contract.forge($("keepId").value.trim(), $("burnId").value.trim(), toHex(encodeArt(px)), {value:fees.forge}));
+$("keepId").oninput = refreshActions;
+$("burnId").oninput = refreshActions;
+
+for (const [btn,pane,other,otherPane] of [
+  ["modeMint","mintPane","modeForge","forgePane"],
+  ["modeForge","forgePane","modeMint","mintPane"]
+]){
+  $(btn).onclick = () => {
+    $(btn).setAttribute("aria-pressed","true");
+    $(other).setAttribute("aria-pressed","false");
+    $(pane).hidden = false; $(otherPane).hidden = true;
+  };
+}
+
+paintAll();
+if ($("addr").value) say("Address remembered. Press \u201cLoad contract\u201d to connect to it.");
+</script>
+</body>
+</html>
