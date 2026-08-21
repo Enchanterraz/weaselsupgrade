@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RH Pixel Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  /* Milk ground, deep green ink. The chain's own electric green is held back
+     and used only where the chain is actually doing something — live counts,
+     the mint button, a confirmed transaction. Everything else is calm sage, so
+     the bright green always means something rather than just decorating. */
+  :root{
+    --ground:#FCFAF4; --panel:#F5F2E7; --panel-2:#EDEADC;
+    --line:#C6DACD; --line-soft:#DCE8E0;
+    --ink:#14392B; --ink-2:#2E6B52; --dim:#4A7561;
+    --rh:#00C805; --rh-deep:#00A804; --rh-text:#077A08;
+    --warn:#96570C; --bad:#B0392C;
+    --cell:9px;
+    --shadow:rgba(20,57,43,.5);
+    --canvas-grid:rgba(20,57,43,.16);
+    --canvas-grid-major:rgba(20,57,43,.30);
+  }
+  /* Night: the same hierarchy inverted. Green still means "the chain is doing
+     something"; it just has to burn a little brighter against a dark ground. */
+  html[data-theme="night"]{
+    --ground:#0F1512; --panel:#161E1A; --panel-2:#1F2A24;
+    --line:#2E3F36; --line-soft:#243029;
+    --ink:#E2F1E8; --ink-2:#8FD3AF; --dim:#96AFA1;
+    --rh:#00E406; --rh-deep:#00C805; --rh-text:#5CEA6B;
+    --warn:#E8AC5E; --bad:#E88679;
+    --shadow:rgba(0,0,0,.7);
+    --canvas-grid:rgba(226,241,232,.16);
+    --canvas-grid-major:rgba(226,241,232,.30);
+  }
+  html[data-theme="night"] button.t,
+  html[data-theme="night"] .size,
+  html[data-theme="night"] .setup input[type=text],
+  html[data-theme="night"] .field input,
+  html[data-theme="night"] .modes button[aria-pressed="true"]{background:var(--panel-2)}
+  html[data-theme="night"] .board-wrap{box-shadow:0 6px 20px -14px var(--shadow)}
+  html[data-theme="night"] .btn{color:#04210E}
+  html[data-theme="night"] #boot{background:#2A1512;border-color:#5E2A21;color:#FFC9BF}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--ground);color:var(--ink);
+       font:400 15px/1.55 "Bricolage Grotesque",system-ui,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  .mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+
+  #boot{padding:14px 24px;background:#FDF0EC;border-bottom:1px solid #E8B9AE;
+        font:400 14px/1.5 system-ui,sans-serif;color:#8C2E22}
+
+  header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+         padding:16px 24px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .wordmark{font-family:"Silkscreen",monospace;font-size:18px;letter-spacing:.02em;color:var(--ink)}
+  .wordmark span{display:inline-block;animation:hop 1.8s ease-in-out infinite}
+  @keyframes hop{0%,62%,100%{transform:translateY(0)} 31%{transform:translateY(-7px)}}
+  .tagline{color:var(--dim);font-size:13px}
+  header .spacer{flex:1}
+  .counter{font-family:"JetBrains Mono",monospace;font-size:13px;color:var(--dim)}
+  .counter b{color:var(--ink);font-weight:700}
+  .live-dot{display:inline-block;width:7px;height:7px;border-radius:50%;
+            background:var(--rh);margin-right:6px;vertical-align:middle;
+            box-shadow:0 0 0 3px rgba(0,200,5,.18)}
+
+  .setup{display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+         padding:13px 24px;border-bottom:1px solid var(--line-soft)}
+  .setup input[type=text]{flex:1;min-width:min(400px,100%);background:#fff;
+    border:1px solid var(--line);border-radius:7px;color:var(--ink);padding:9px 12px;
+    font-family:"JetBrains Mono",monospace;font-size:13px}
+  .setup input[type=text]:focus{outline:2px solid var(--rh);outline-offset:-1px;border-color:var(--rh)}
+  .setup label{font-size:13px;color:var(--dim);display:flex;align-items:center;gap:5px}
+  .themeBtn{display:flex;align-items:center;gap:6px;font:600 13px/1 "Bricolage Grotesque",sans-serif;
+    padding:8px 13px;border-radius:7px;border:1px solid var(--line);background:var(--panel);
+    color:var(--ink);cursor:pointer}
+  .themeBtn:hover{border-color:var(--ink-2)}
+  .setup button{font:600 13px/1 "Bricolage Grotesque",sans-serif;padding:10px 18px;border-radius:7px;
+    border:1px solid var(--ink);background:var(--ink);color:var(--ground);cursor:pointer}
+  .setup button:hover{background:var(--ink-2);border-color:var(--ink-2)}
+
+  main{display:grid;grid-template-columns:minmax(0,1fr) 272px;gap:30px;
+       padding:26px 24px;max-width:1100px;margin:0 auto;align-items:start}
+  @media (max-width:880px){ main{grid-template-columns:1fr} }
+
+  .stage{display:flex;flex-direction:column;gap:15px;min-width:0}
+  .board-wrap{position:relative;width:calc(var(--cell)*64);max-width:100%;
+    border:2px solid var(--line);border-radius:10px;overflow:hidden;
+    box-shadow:0 6px 20px -14px var(--shadow)}
+  .board{width:100%;aspect-ratio:1;image-rendering:pixelated;cursor:crosshair;
+    touch-action:none;display:block}
+  .grid-overlay{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .15s;
+    background-image:
+      repeating-linear-gradient(to right,  var(--canvas-grid-major) 0 1px, transparent 1px 25%),
+      repeating-linear-gradient(to bottom, var(--canvas-grid-major) 0 1px, transparent 1px 25%),
+      repeating-linear-gradient(to right,  var(--canvas-grid) 0 1px, transparent 1px 6.25%),
+      repeating-linear-gradient(to bottom, var(--canvas-grid) 0 1px, transparent 1px 6.25%)}
+  .grid-overlay.on{opacity:1}
+  .sym-axis{position:absolute;top:0;bottom:0;left:50%;width:1px;pointer-events:none;
+    background:repeating-linear-gradient(to bottom, var(--rh) 0 6px, transparent 6px 12px);
+    opacity:0;transition:opacity .15s}
+  .sym-axis.on{opacity:.55}
+
+  /* The contract stores drawings as colour runs and caps them at 2048. That
+     budget is invisible until a mint reverts, so it goes on screen. */
+  .meter{border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:13px 15px}
+  .meter-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:9px}
+  .meter-label{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);font-weight:600}
+  .meter-read{font-family:"JetBrains Mono",monospace;font-size:13px;color:var(--ink)}
+  .track{position:relative;height:8px;background:var(--panel-2);border-radius:99px;overflow:hidden}
+  .fill{height:100%;width:0;background:var(--rh);transition:width .12s linear,background .2s}
+  .tick{position:absolute;top:-3px;width:1px;height:14px;background:var(--dim);opacity:.5}
+  .meter-note{margin:9px 0 0;font-size:13px;color:var(--dim);min-height:1.4em}
+  .meter-note.bad{color:var(--bad);font-weight:600} .meter-note.warn{color:var(--warn);font-weight:600}
+
+  aside{display:flex;flex-direction:column;gap:20px}
+  .group-label{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);
+               margin:0 0 9px;font-weight:600}
+
+  .swatches{display:grid;grid-template-columns:repeat(8,1fr);gap:5px}
+  .sw{aspect-ratio:1;border:1px solid rgba(20,57,43,.18);border-radius:5px;cursor:pointer;padding:0;
+      transition:transform .1s}
+  .sw:hover{transform:scale(1.09)}
+  .sw[aria-pressed="true"]{outline:2.5px solid var(--ink);outline-offset:2px;z-index:1}
+
+  /* Colour picker. Sixteen slots, each freely editable — the contract stores a
+     palette per drawing, so these choices travel with the piece. */
+  .swatch-wrap{position:relative}
+  .sw.editing{outline:2.5px solid var(--rh);outline-offset:2px}
+  .editbar{display:flex;align-items:center;gap:8px;margin-top:9px}
+  .editbar .chip{width:24px;height:24px;border-radius:5px;border:1px solid var(--line);flex:none}
+  .editbar .curhex{flex:1;font-size:12.5px;color:var(--dim)}
+  .editbar button{font:600 12px/1 "Bricolage Grotesque",sans-serif;padding:8px 12px;border-radius:6px;
+    border:1px solid var(--ink);background:var(--ink);color:var(--ground);cursor:pointer}
+  .editbar button:hover{background:var(--ink-2);border-color:var(--ink-2)}
+  .picker{position:absolute;z-index:30;right:0;top:calc(100% + 8px);width:248px;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:13px;
+    box-shadow:0 12px 34px -18px var(--shadow)}
+  .picker h4{margin:0 0 10px;font:600 12px/1 "Bricolage Grotesque",sans-serif;
+    text-transform:uppercase;letter-spacing:.09em;color:var(--dim)}
+  .sv{position:relative;width:100%;height:118px;border-radius:7px;cursor:crosshair;
+      border:1px solid var(--line);touch-action:none}
+  .sv-cursor{position:absolute;width:13px;height:13px;border-radius:50%;border:2px solid #fff;
+    box-shadow:0 0 0 1px rgba(0,0,0,.55);transform:translate(-50%,-50%);pointer-events:none}
+  .hue{-webkit-appearance:none;appearance:none;width:100%;height:13px;border-radius:99px;margin:11px 0 9px;
+    background:linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00);cursor:pointer}
+  .hue::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;
+    background:#fff;border:2px solid var(--ink);cursor:pointer}
+  .hue::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:#fff;
+    border:2px solid var(--ink);cursor:pointer}
+  .picker-row{display:flex;gap:7px;align-items:center}
+  .picker-row .prev{width:34px;height:34px;border-radius:6px;border:1px solid var(--line);flex:none}
+  .picker-row input{flex:1;min-width:0;background:var(--ground);border:1px solid var(--line);
+    border-radius:6px;color:var(--ink);padding:8px;font-family:"JetBrains Mono",monospace;
+    font-size:13px;text-transform:uppercase}
+  .picker-row input:focus{outline:2px solid var(--rh);outline-offset:-1px}
+  .picker-row button{font:600 12px/1 "Bricolage Grotesque",sans-serif;padding:9px 12px;
+    border-radius:6px;border:1px solid var(--ink);background:var(--ink);color:var(--ground);cursor:pointer}
+  .recent{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;margin-top:10px}
+  .recent button{aspect-ratio:1;border:1px solid var(--line);border-radius:4px;cursor:pointer;padding:0}
+  .picker-hint{margin:9px 0 0;font-size:11.5px;color:var(--dim);line-height:1.45}
+
+  .tools{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+  button.t{display:flex;align-items:center;gap:7px;font:500 13px/1 "Bricolage Grotesque",sans-serif;
+    color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:7px;
+    padding:10px 9px;cursor:pointer;text-align:left}
+  button.t svg{width:15px;height:15px;flex:none;stroke:currentColor;fill:none;
+    stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  button.t[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--ground)}
+  button.t[aria-pressed="true"] kbd{color:rgba(252,250,244,.65)}
+  button.t:hover:not([aria-pressed="true"]){border-color:var(--ink-2)}
+  button.t kbd{margin-left:auto;color:var(--dim);font-family:"JetBrains Mono",monospace;font-size:11px}
+
+  .sizes{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+  .size{aspect-ratio:1;display:grid;place-items:center;background:#fff;border:1px solid var(--line);
+        border-radius:7px;cursor:pointer;padding:0}
+  .size i{display:block;background:var(--ink);border-radius:1px}
+  .size[aria-pressed="true"]{background:var(--ink);border-color:var(--ink)}
+  .size[aria-pressed="true"] i{background:var(--ground)}
+  .size:hover:not([aria-pressed="true"]){border-color:var(--ink-2)}
+
+  .btn{display:block;width:100%;font:700 14px/1 "Bricolage Grotesque",sans-serif;padding:14px;
+    border-radius:8px;border:1px solid var(--rh-deep);background:var(--rh);color:#06331A;cursor:pointer;
+    box-shadow:0 2px 0 rgba(0,140,4,.35)}
+  .btn:hover:not(:disabled){background:var(--rh-deep);color:#fff}
+  .btn:disabled{background:var(--panel-2);color:var(--dim);border-color:var(--line);
+    cursor:not-allowed;box-shadow:none}
+  .btn.ghost{background:#fff;color:var(--ink);border-color:var(--ink);box-shadow:none}
+  .btn.ghost:hover{background:var(--panel)}
+
+  .status{font-size:13px;color:var(--dim);min-height:2.6em;word-break:break-word;white-space:pre-wrap}
+  .status a{color:var(--ink-2)}
+  .status.err{color:var(--bad)}
+  .status.good{color:var(--rh-text);font-weight:600}
+
+  .modes{display:flex;gap:4px;border:1px solid var(--line);border-radius:8px;padding:4px;background:var(--panel)}
+  .modes button{flex:1;font:600 13px/1 "Bricolage Grotesque",sans-serif;padding:9px;border:0;
+    border-radius:5px;background:transparent;color:var(--dim);cursor:pointer}
+  .modes button[aria-pressed="true"]{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(20,57,43,.12)}
+
+  .field{display:flex;gap:6px;margin-top:8px}
+  .field input{width:100%;background:#fff;border:1px solid var(--line);border-radius:7px;
+    color:var(--ink);padding:10px;font-family:"JetBrains Mono",monospace;font-size:13px}
+  .field input:focus{outline:2px solid var(--rh);outline-offset:-1px}
+  .hint{font-size:12.5px;color:var(--dim);margin-top:8px}
+  .soldout{border:1px solid var(--line);background:var(--panel);border-radius:8px;
+    padding:14px;font-size:13px;color:var(--dim)}
+  [hidden]{display:none !important}
+  @media (prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important}}
+</style>
+</head>
+<body>
+
+<div id="boot">Starting up&hellip; if this stays on screen, the page could not load its blockchain library. The reason will appear here.</div>
+
+<header>
+  <span class="wordmark" id="wordmark" aria-label="RH Pixel Studio"></span>
+  <span class="tagline">64&times;64. Drawn here, stored on chain.</span>
+  <span class="spacer"></span>
+  <span class="counter mono" id="supply">no contract loaded</span>
+  <button class="themeBtn" id="theme" aria-label="Switch between day and night"></button>
+</header>
+
+<div class="setup">
+  <input type="text" id="addr" placeholder="contract address (0x…)" spellcheck="false" autocomplete="off">
+  <label><input type="checkbox" id="mainnet"> mainnet</label>
+  <button id="loadBtn">Load contract</button>
+</div>
+
+<main>
+  <section class="stage">
+    <div class="board-wrap">
+      <canvas class="board" id="board" width="64" height="64" aria-label="Drawing canvas, 64 by 64 pixels"></canvas>
+      <div class="grid-overlay" id="gridOverlay"></div>
+      <div class="sym-axis" id="symAxis"></div>
+    </div>
+    <div class="meter">
+      <div class="meter-top">
+        <span class="meter-label">Compression budget</span>
+        <span class="meter-read mono"><b id="runs">0</b> <span style="color:var(--dim)">/ 2048 runs</span></span>
+      </div>
+      <div class="track"><div class="fill" id="fill"></div><div class="tick" id="tickMin"></div></div>
+      <p class="meter-note" id="note"></p>
+    </div>
+  </section>
+
+  <aside>
+    <div class="modes" role="group" aria-label="Mode">
+      <button id="modeMint" aria-pressed="true">Mint</button>
+      <button id="modeForge" aria-pressed="false">Forge</button>
+    </div>
+
+    <div class="swatch-wrap">
+      <p class="group-label">Palette &mdash; all sixteen are yours to change</p>
+      <div class="swatches" id="swatches"></div>
+      <div class="editbar">
+        <span class="chip" id="curChip"></span>
+        <span class="curhex mono" id="curHex">#000000</span>
+        <button id="editColour">Edit colour</button>
+      </div>
+      <div class="picker" id="picker" hidden>
+        <h4>Slot <span id="slotNum">1</span></h4>
+        <div class="sv" id="sv"><div class="sv-cursor" id="svCursor"></div></div>
+        <input type="range" class="hue" id="hue" min="0" max="359" value="0" aria-label="Hue">
+        <div class="picker-row">
+          <div class="prev" id="prev"></div>
+          <input type="text" id="hex" maxlength="7" spellcheck="false" aria-label="Hex colour">
+          <button id="pickDone">Done</button>
+        </div>
+        <div class="recent" id="recent"></div>
+        <p class="picker-hint">These sixteen colours are saved with this drawing. Every piece keeps its own.</p>
+      </div>
+    </div>
+
+    <div>
+      <p class="group-label">Pencil size</p>
+      <div class="sizes" id="sizes"></div>
+    </div>
+
+    <div>
+      <p class="group-label">Tools</p>
+      <div class="tools">
+        <button class="t" id="tPencil" aria-pressed="true"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11.5 2.5l2 2L5 13H3v-2z"/><path d="M10 4l2 2"/></svg>Pencil<kbd>B</kbd></button>
+        <button class="t" id="tFill" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 2l6 6-5 5a2 2 0 01-2.8 0L2 10.8a2 2 0 010-2.8z"/><path d="M13.5 11c0 1-1.5 2.5-1.5 2.5S10.5 12 10.5 11a1.5 1.5 0 013 0z"/></svg>Fill<kbd>G</kbd></button>
+        <button class="t" id="tPick" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 2.5a1.8 1.8 0 00-2.5 0L9.5 4 8 2.5 6.5 4 8 5.5l-5 5V13h2.5l5-5 1.5 1.5L13.5 8 12 6.5l1.5-1.5a1.8 1.8 0 000-2.5z"/></svg>Pick<kbd>I</kbd></button>
+        <button class="t" id="tUndo"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h7a3 3 0 010 6H7"/><path d="M6 5L3 8l3 3"/></svg>Undo<kbd>Z</kbd></button>
+      </div>
+      <div class="tools" style="margin-top:6px">
+        <button class="t" id="tGrid" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2h12v12H2z"/><path d="M6 2v12M10 2v12M2 6h12M2 10h12"/></svg>Grid<kbd>#</kbd></button>
+        <button class="t" id="tSym" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5v13" stroke-dasharray="2 2"/><path d="M6 4L2.5 8 6 12z"/><path d="M10 4l3.5 4L10 12z"/></svg>Mirror<kbd>M</kbd></button>
+      </div>
+      <div class="tools" style="margin-top:6px">
+        <button class="t" id="tResetPal"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5a5.5 5.5 0 105.2 3.7"/><path d="M13.5 2v4h-4"/></svg>Reset colours</button>
+        <button class="t" id="tClear"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h10"/><path d="M5.5 4.5V3h5v1.5"/><path d="M4.5 4.5l.7 8.2a1 1 0 001 .8h3.6a1 1 0 001-.8l.7-8.2"/></svg>Clear</button>
+        <button class="t" id="tPng"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8"/><path d="M5 7l3 3 3-3"/><path d="M2.5 12.5h11"/></svg>Save PNG</button>
+      </div>
+    </div>
+
+    <div id="mintPane">
+      <button class="btn ghost" id="connect">Connect wallet</button>
+      <button class="btn" id="mint" hidden disabled style="margin-top:8px">Mint this drawing</button>
+      <p class="hint" id="feeHint" hidden></p>
+      <div class="soldout" id="soldout" hidden>
+        Every piece is minted. Switch to Forge to redraw one you own.
+      </div>
+    </div>
+
+    <div id="forgePane" hidden>
+      <button class="btn ghost" id="connect2">Connect wallet</button>
+      <p class="group-label" style="margin-top:18px">Burn one, redraw the other</p>
+      <div class="field">
+        <input id="keepId" inputmode="numeric" placeholder="keep #" aria-label="Token to keep and redraw">
+        <input id="burnId" inputmode="numeric" placeholder="burn #" aria-label="Token to burn">
+      </div>
+      <p class="hint">You must own both. The kept piece takes the drawing on the left; the other is destroyed and supply drops by one.</p>
+      <button class="btn" id="forge" style="margin-top:10px" disabled>Forge</button>
+    </div>
+
+    <p class="status" id="status"></p>
+  </aside>
+</main>
+
+<script>
+/* Theme is applied before the body paints, so night users never see a flash of
+   milk. Also honours the operating system setting on a first visit. */
+(function(){
+  var saved = null;
+  try { saved = localStorage.getItem("rh_theme"); } catch(e){}
+  var night = saved ? saved === "night"
+    : matchMedia("(prefers-color-scheme: dark)").matches;
+  document.documentElement.dataset.theme = night ? "night" : "day";
+})();
+
+window.addEventListener("error", e => {
+  const b = document.getElementById("boot");
+  if (b){ b.hidden = false; b.textContent = "Script error: " + (e.message || e.error); }
+});
+window.addEventListener("unhandledrejection", e => {
+  const b = document.getElementById("boot");
+  if (b){ b.hidden = false; b.textContent = "Failed: " + (e.reason?.message || e.reason); }
+});
+</script>
+
+<script type="module">
+/* ethers comes from a CDN. A failed module import kills the whole script
+   silently, which looks identical to "the page is broken", so try several
+   sources and report the failure on the page. */
+const SOURCES = [
+  "https://cdn.jsdelivr.net/npm/ethers@6.13.4/+esm",
+  "https://esm.sh/ethers@6.13.4",
+  "https://unpkg.com/ethers@6.13.4/dist/ethers.min.js"
+];
+const boot = document.getElementById("boot");
+let ethers = null; const tried = [];
+for (const url of SOURCES){
+  try{
+    boot.textContent = "Loading blockchain library from " + new URL(url).host + " …";
+    const mod = await import(url);
+    ethers = mod.ethers ?? mod;
+    if (ethers && ethers.JsonRpcProvider) break;
+    ethers = null; tried.push(new URL(url).host + " (loaded but unusable)");
+  } catch(e){ tried.push(new URL(url).host + " (" + (e.message || "blocked") + ")"); }
+}
+if (!ethers){
+  boot.innerHTML = "<b>Could not load the blockchain library.</b><br>Tried: " + tried.join("; ") +
+    "<br><br>This is a network problem, not a problem with your contract. " +
+    "You can still draw and save a PNG, but not mint.";
+} else { boot.hidden = true; }
+
+/* ------------------------------------------------------------------ config */
+const NET = {
+  testnet:{ chainId:"0xB626", chainName:"Robinhood Chain Testnet",
+    nativeCurrency:{name:"Ether",symbol:"ETH",decimals:18},
+    rpcUrls:["https://rpc.testnet.chain.robinhood.com"],
+    blockExplorerUrls:["https://explorer.testnet.chain.robinhood.com"] },
+  mainnet:{ chainId:"0x1237", chainName:"Robinhood Chain",
+    nativeCurrency:{name:"Ether",symbol:"ETH",decimals:18},
+    rpcUrls:["https://rpc.mainnet.chain.robinhood.com"],
+    blockExplorerUrls:["https://explorer.mainnet.chain.robinhood.com"] }
+};
+const ABI = [
+  "function mint(bytes3[16] pal, bytes art) payable returns (uint256)",
+  "function forge(uint256 keepId, uint256 burnId, bytes3[16] pal, bytes art) payable",
+  "function MINT_FEE() view returns (uint256)",
+  "function FORGE_FEE() view returns (uint256)",
+  "function MAX_SUPPLY() view returns (uint256)",
+  "function liveSupply() view returns (uint256)",
+  "function remaining() view returns (uint256)",
+  "function mintOpen() view returns (bool)",
+  "function forgeOpen() view returns (bool)",
+  "function name() view returns (string)"
+];
+/* A starting point, not a rule. The contract stores sixteen colours alongside
+   each drawing, so these are editable and travel with the piece. */
+const DEFAULT_PALETTE = ["#0E0D17","#23203A","#3F3A63","#6B5F9E","#A394D6","#D9D2F2",
+                 "#FFFFFF","#F5E0B8","#E0A860","#B06A3A","#6E3A2C","#D94F4F",
+                 "#F2A03D","#F5D94A","#5FA85A","#3D7A8C"];
+let PALETTE = DEFAULT_PALETTE.slice();
+try { const s = localStorage.getItem("rh_palette"); if (s) PALETTE = JSON.parse(s); } catch {}
+if (!Array.isArray(PALETTE) || PALETTE.length !== 16) PALETTE = DEFAULT_PALETTE.slice();
+const savePalette = () => { try { localStorage.setItem("rh_palette", JSON.stringify(PALETTE)); } catch {} };
+/* Contract-side rule: a drawing must use at least two genuinely different
+   colours, so identical slots can't be used to mint a solid block. */
+const distinctUsed = () => {
+  const used = new Set();
+  for (let i = 0; i < PIXELS; i++) used.add(PALETTE[px[i]].toUpperCase());
+  return used.size;
+};
+const GRID = 64, PIXELS = 4096, MIN_RUNS = 24, MAX_RUNS = 2048;
+
+/* ----------------------------------------------------------------- encoder */
+/* 2 bytes per run, big-endian: (runLength-1)<<4 | colour, reading order,
+   summing to exactly 4096. Verified against the contract in Interop.t.sol. */
+function encodeArt(px){
+  const out = []; let i = 0;
+  while (i < PIXELS){
+    const c = px[i] & 0x0f; let n = 1;
+    while (i + n < PIXELS && (px[i+n] & 0x0f) === c) n++;
+    const word = ((n - 1) << 4) | c;
+    out.push((word >> 8) & 0xff, word & 0xff);
+    i += n;
+  }
+  return Uint8Array.from(out);
+}
+const runCount = px => encodeArt(px).length / 2;
+const toHex = b => "0x" + [...b].map(x => x.toString(16).padStart(2,"0")).join("");
+
+/* -------------------------------------------------------------- drawing --- */
+const $ = id => document.getElementById(id);
+const board = $("board"), ctx = board.getContext("2d",{willReadFrequently:true});
+let px = new Uint8Array(PIXELS).fill(5);
+let colour = 0, tool = "pencil", drawing = false;
+let brush = 1, mirror = false;
+const undoStack = [];
+
+function paintAll(){
+  const img = ctx.createImageData(GRID, GRID);
+  for (let i = 0; i < PIXELS; i++){
+    const h = PALETTE[px[i]];
+    img.data[i*4]   = parseInt(h.slice(1,3),16);
+    img.data[i*4+1] = parseInt(h.slice(3,5),16);
+    img.data[i*4+2] = parseInt(h.slice(5,7),16);
+    img.data[i*4+3] = 255;
+  }
+  ctx.putImageData(img,0,0);
+  updateMeter();
+}
+function pushUndo(){ undoStack.push(px.slice()); if (undoStack.length > 60) undoStack.shift(); }
+
+function bucket(start, target){
+  if (px[start] === target) return;
+  const from = px[start], q = [start];
+  while (q.length){
+    const i = q.pop();
+    if (px[i] !== from) continue;
+    px[i] = target;
+    const x = i % GRID;
+    if (x > 0) q.push(i-1);
+    if (x < GRID-1) q.push(i+1);
+    if (i >= GRID) q.push(i-GRID);
+    if (i < PIXELS-GRID) q.push(i+GRID);
+  }
+}
+function dot(x,y){ if (x>=0 && y>=0 && x<GRID && y<GRID) px[y*GRID+x] = colour; }
+/* A square nib of the chosen width, centred as evenly as an integer grid allows. */
+function plot(x,y){
+  const half = (brush - 1) >> 1;
+  for (let dy = -half; dy < brush - half; dy++)
+    for (let dx = -half; dx < brush - half; dx++){
+      dot(x+dx, y+dy);
+      if (mirror) dot(GRID-1-(x+dx), y+dy);
+    }
+}
+/* A pointer reports its position only every so often, so a drag arrives as a
+   handful of scattered points. Without joining them a stroke records as
+   disconnected specks, so every gap is filled with Bresenham. */
+function stroke(x0,y0,x1,y1){
+  const dx = Math.abs(x1-x0), sx = x0<x1?1:-1;
+  const dy = -Math.abs(y1-y0), sy = y0<y1?1:-1;
+  let err = dx+dy;
+  for(;;){
+    plot(x0,y0);
+    if (x0===x1 && y0===y1) break;
+    const e2 = 2*err;
+    if (e2 >= dy){ err += dy; x0 += sx; }
+    if (e2 <= dx){ err += dx; y0 += sy; }
+  }
+}
+const coords = e => {
+  const r = board.getBoundingClientRect();
+  return [Math.floor((e.clientX-r.left)/r.width*GRID),
+          Math.floor((e.clientY-r.top)/r.height*GRID)];
+};
+let lastX = -1, lastY = -1;
+
+board.addEventListener("pointerdown", e => {
+  e.preventDefault(); board.setPointerCapture(e.pointerId);
+  const [x,y] = coords(e);
+  if (x < 0 || y < 0 || x >= GRID || y >= GRID) return;
+  pushUndo(); drawing = true;
+  if (tool === "pick"){ setColour(px[y*GRID+x]); setTool("pencil"); drawing = false; return; }
+  if (tool === "fill"){
+    bucket(y*GRID+x, colour);
+    if (mirror) bucket(y*GRID + (GRID-1-x), colour);
+    paintAll(); lastX = lastY = -1; return;
+  }
+  plot(x,y); lastX = x; lastY = y; paintAll();
+});
+board.addEventListener("pointermove", e => {
+  if (!drawing || tool !== "pencil") return;
+  const [x,y] = coords(e);
+  if (x === lastX && y === lastY) return;
+  if (lastX >= 0) stroke(lastX,lastY,x,y); else plot(x,y);
+  lastX = x; lastY = y; paintAll();
+});
+const endStroke = () => { drawing = false; lastX = lastY = -1; };
+board.addEventListener("pointerup", endStroke);
+board.addEventListener("pointercancel", endStroke);
+board.addEventListener("pointerleave", endStroke);
+
+/* ------------------------------------------------------------ the meter --- */
+$("tickMin").style.left = (MIN_RUNS/MAX_RUNS*100) + "%";
+let currentRuns = 0;
+function updateMeter(){
+  const r = runCount(px);
+  currentRuns = r;
+  $("runs").textContent = r;
+  $("fill").style.width = Math.min(100, r/MAX_RUNS*100) + "%";
+  let state = "ok", msg = "";
+  if (r < MIN_RUNS){ state="bad"; msg = `Too plain to mint. Needs at least ${MIN_RUNS} colour runs — keep drawing.`; }
+  else if (r > MAX_RUNS){ state="bad"; msg = `Too busy to mint. ${r} runs, and the chain accepts ${MAX_RUNS}. Simplify some fine texture.`; }
+  else if (r > MAX_RUNS*0.85){ state="warn"; msg = `Close to the limit. ${MAX_RUNS-r} runs of detail left.`; }
+  else if (distinctUsed() < 2){ state="bad"; msg = "Needs at least two different colours — the slots in use are all the same shade."; }
+  else { msg = `About ${((r*2+48)/1024).toFixed(1)} KB on chain, colours included.`; }
+  $("fill").style.background = state==="bad" ? "var(--bad)" : state==="warn" ? "var(--warn)" : "var(--rh)";
+  $("note").className = "meter-note " + (state==="ok" ? "" : state);
+  $("note").textContent = msg;
+  refreshActions();
+}
+const artValid = () => currentRuns >= MIN_RUNS && currentRuns <= MAX_RUNS && distinctUsed() >= 2;
+
+/* ------------------------------------------------------------- controls --- */
+const swatches = $("swatches");
+function buildSwatches(){
+  swatches.innerHTML = "";
+  PALETTE.forEach((hex,i) => {
+    const b = document.createElement("button");
+    b.className = "sw"; b.style.background = hex;
+    b.setAttribute("aria-pressed", String(i === colour));
+    b.setAttribute("aria-label", "Colour " + (i+1) + ", " + hex + ". Click to use; click again to change.");
+    b.title = hex + " — click to use, click again to change";
+    // Clicking the slot already in use opens the picker, so the feature is
+    // reachable without knowing that double-click does anything.
+    b.onclick = () => { if (colour === i && editing < 0) openPicker(i); else setColour(i); };
+    b.ondblclick = e => { e.preventDefault(); openPicker(i); };
+    swatches.appendChild(b);
+  });
+}
+function setColour(i){
+  colour = i;
+  [...swatches.children].forEach((b,k) => b.setAttribute("aria-pressed", String(k===i)));
+  $("curChip").style.background = PALETTE[i];
+  $("curHex").textContent = PALETTE[i] + "  ·  slot " + (i+1);
+}
+$("editColour").onclick = () => openPicker(colour);
+
+/* ------------------------------------------------------- colour picker --- */
+const picker = $("picker"), sv = $("sv"), svCursor = $("svCursor"), hue = $("hue");
+let editing = -1, hsv = {h:0, s:1, v:1};
+
+const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+function hsv2rgb(h,s,v){
+  const f = n => { const k = (n + h/60) % 6;
+    return Math.round(255 * (v - v*s*Math.max(0, Math.min(k, 4-k, 1)))); };
+  return [f(5), f(3), f(1)];
+}
+function rgb2hsv(r,g,b){
+  r/=255; g/=255; b/=255;
+  const mx = Math.max(r,g,b), mn = Math.min(r,g,b), d = mx-mn;
+  let h = 0;
+  if (d){ h = mx===r ? 60*(((g-b)/d)%6) : mx===g ? 60*((b-r)/d+2) : 60*((r-g)/d+4); }
+  if (h < 0) h += 360;
+  return {h, s: mx ? d/mx : 0, v: mx};
+}
+const toHexStr = ([r,g,b]) => "#" + [r,g,b].map(v => v.toString(16).padStart(2,"0")).join("").toUpperCase();
+
+function paintPicker(){
+  const base = toHexStr(hsv2rgb(hsv.h,1,1));
+  sv.style.background =
+    `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, ${base})`;
+  svCursor.style.left = (hsv.s*100) + "%";
+  svCursor.style.top  = ((1-hsv.v)*100) + "%";
+  const hex = toHexStr(hsv2rgb(hsv.h,hsv.s,hsv.v));
+  $("prev").style.background = hex;
+  $("hex").value = hex;
+  if (editing >= 0){
+    PALETTE[editing] = hex;
+    swatches.children[editing].style.background = hex;
+    if (editing === colour){ $("curChip").style.background = hex; $("curHex").textContent = hex + "  ·  slot " + (editing+1); }
+    paintAll();
+  }
+}
+function openPicker(i){
+  editing = i;
+  [...swatches.children].forEach((b,k) => b.classList.toggle("editing", k===i));
+  $("slotNum").textContent = i + 1;
+  const h2 = PALETTE[i].replace("#","");
+  hsv = rgb2hsv(parseInt(h2.slice(0,2),16), parseInt(h2.slice(2,4),16), parseInt(h2.slice(4,6),16));
+  hue.value = Math.round(hsv.h);
+  picker.hidden = false;
+  paintPicker();
+  setColour(i);
+}
+function closePicker(){
+  if (editing < 0) return;
+  pushRecent(PALETTE[editing]);
+  savePalette();
+  [...swatches.children].forEach(b => b.classList.remove("editing"));
+  editing = -1; picker.hidden = true;
+}
+$("pickDone").onclick = closePicker;
+document.addEventListener("pointerdown", e => {
+  if (editing < 0) return;
+  if (!picker.contains(e.target) && !swatches.contains(e.target)) closePicker();
+});
+
+let svDrag = false;
+const svPick = e => {
+  const r = sv.getBoundingClientRect();
+  hsv.s = clamp01((e.clientX - r.left) / r.width);
+  hsv.v = clamp01(1 - (e.clientY - r.top) / r.height);
+  paintPicker();
+};
+sv.addEventListener("pointerdown", e => { e.preventDefault(); sv.setPointerCapture(e.pointerId); svDrag = true; svPick(e); });
+sv.addEventListener("pointermove", e => { if (svDrag) svPick(e); });
+sv.addEventListener("pointerup",   () => { svDrag = false; });
+hue.oninput = () => { hsv.h = +hue.value; paintPicker(); };
+$("hex").oninput = () => {
+  const v = $("hex").value.trim().replace(/^#/,"");
+  if (!/^[0-9a-fA-F]{6}$/.test(v)) return;
+  hsv = rgb2hsv(parseInt(v.slice(0,2),16), parseInt(v.slice(2,4),16), parseInt(v.slice(4,6),16));
+  hue.value = Math.round(hsv.h);
+  paintPicker();
+};
+
+/* Recently mixed colours, so a shade can be reused across slots. */
+let recent = [];
+try { recent = JSON.parse(localStorage.getItem("rh_recent") || "[]"); } catch {}
+function pushRecent(hex){
+  recent = [hex, ...recent.filter(c => c !== hex)].slice(0,8);
+  try { localStorage.setItem("rh_recent", JSON.stringify(recent)); } catch {}
+  buildRecent();
+}
+function buildRecent(){
+  const box = $("recent"); box.innerHTML = "";
+  recent.forEach(hex => {
+    const b = document.createElement("button");
+    b.style.background = hex; b.title = hex; b.setAttribute("aria-label", "Reuse " + hex);
+    b.onclick = () => {
+      const v = hex.replace("#","");
+      hsv = rgb2hsv(parseInt(v.slice(0,2),16), parseInt(v.slice(2,4),16), parseInt(v.slice(4,6),16));
+      hue.value = Math.round(hsv.h); paintPicker();
+    };
+    box.appendChild(b);
+  });
+}
+buildRecent();
+
+const sizes = $("sizes");
+[1,2,3,4].forEach(n => {
+  const b = document.createElement("button");
+  b.className = "size";
+  b.setAttribute("aria-pressed", String(n === brush));
+  b.setAttribute("aria-label", n + " pixel pencil");
+  b.title = n + "px";
+  const i = document.createElement("i");
+  i.style.width = i.style.height = (n * 3 + 2) + "px";
+  b.appendChild(i);
+  b.onclick = () => setBrush(n);
+  sizes.appendChild(b);
+});
+function setBrush(n){ brush = n;
+  [...sizes.children].forEach((b,k) => b.setAttribute("aria-pressed", String(k+1===n))); }
+
+function setTool(t){ tool = t;
+  for (const [id,n] of [["tPencil","pencil"],["tFill","fill"],["tPick","pick"]])
+    $(id).setAttribute("aria-pressed", String(n===t)); }
+$("tPencil").onclick = () => setTool("pencil");
+$("tFill").onclick   = () => setTool("fill");
+$("tPick").onclick   = () => setTool("pick");
+$("tUndo").onclick   = () => { const p = undoStack.pop(); if (p){ px = p; paintAll(); } };
+$("tGrid").onclick   = () => {
+  const on = $("gridOverlay").classList.toggle("on");
+  $("tGrid").setAttribute("aria-pressed", String(on));
+};
+$("tSym").onclick    = () => {
+  mirror = !mirror;
+  $("symAxis").classList.toggle("on", mirror);
+  $("tSym").setAttribute("aria-pressed", String(mirror));
+};
+$("tResetPal").onclick = () => {
+  PALETTE = DEFAULT_PALETTE.slice(); savePalette(); buildSwatches(); paintAll();
+  say("Palette reset to the default sixteen.");
+};
+$("tClear").onclick  = () => { pushUndo(); px = new Uint8Array(PIXELS).fill(5); paintAll(); };
+$("tPng").onclick    = () => {
+  const c = document.createElement("canvas"); c.width = c.height = 512;
+  const g = c.getContext("2d"); g.imageSmoothingEnabled = false;
+  g.drawImage(board,0,0,512,512);
+  const a = document.createElement("a"); a.download = "rh-pixel-studio.png"; a.href = c.toDataURL(); a.click();
+};
+addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT") return;
+  if (e.key === "b") setTool("pencil");
+  if (e.key === "g") setTool("fill");
+  if (e.key === "i") setTool("pick");
+  if (e.key === "m") $("tSym").click();
+  if (e.key === "#" || e.key === "3") $("tGrid").click();
+  if (e.key >= "1" && e.key <= "4" && !e.ctrlKey && !e.metaKey && e.key !== "3") setBrush(+e.key);
+  if (e.key === "z" && (e.metaKey || e.ctrlKey)){ e.preventDefault(); $("tUndo").click(); }
+});
+
+/* ------------------------------------------------------------- the chain -- */
+const statusEl = $("status");
+let signer, contract, fees = {}, open = {mint:false, forge:false}, addr = "";
+const say = (m, kind="") => { statusEl.textContent = m; statusEl.className = "status " + kind; };
+const net = () => $("mainnet").checked ? NET.mainnet : NET.testnet;
+
+function refreshActions(){
+  const ok = signer && artValid();
+  $("mint").disabled  = !(ok && open.mint);
+  $("forge").disabled = !(ok && open.forge && $("keepId").value && $("burnId").value);
+}
+try { $("addr").value = localStorage.getItem("rhstudio_addr") || ""; } catch {}
+
+$("loadBtn").onclick = async () => {
+  addr = $("addr").value.trim();
+  if (!ethers) return say("Blockchain library unavailable — see the message at the top.", "err");
+  if (!ethers.isAddress(addr)) return say("That doesn't look like a contract address.", "err");
+  try { localStorage.setItem("rhstudio_addr", addr); } catch {}
+  await readState();
+};
+
+async function readState(){
+  if (!addr) return;
+  try{
+    const c = new ethers.Contract(addr, ABI, new ethers.JsonRpcProvider(net().rpcUrls[0]));
+    const [nm, live, max, rem, mOpen, fOpen, mFee, fFee] = await Promise.all([
+      c.name(), c.liveSupply(), c.MAX_SUPPLY(), c.remaining(),
+      c.mintOpen(), c.forgeOpen(), c.MINT_FEE(), c.FORGE_FEE()
+    ]);
+    fees = {mint:mFee, forge:fFee};
+    open = {mint:mOpen, forge:fOpen};
+    $("supply").innerHTML = `<span class="live-dot"></span>${nm} &nbsp;·&nbsp; <b>${live}</b> of ${max} live &nbsp;·&nbsp; <b>${rem}</b> left to mint`;
+    $("feeHint").textContent = ethers.formatEther(mFee) + " ETH plus gas.";
+    $("feeHint").hidden = !mOpen;
+    $("soldout").hidden = mOpen;
+    $("mint").hidden = !mOpen;
+    if (signer) contract = new ethers.Contract(addr, ABI, signer);
+    say(fOpen ? "Contract loaded. " + (mOpen ? "Minting and forging are open." : "Mint closed, forging is open.")
+              : "Contract loaded. Forging opens once the mint sells out.");
+    refreshActions();
+  } catch(e){
+    say("Couldn't read that contract. Check the address and that the mainnet box matches where you deployed.\n" + (e?.shortMessage ?? ""), "err");
+  }
+}
+
+async function connect(){
+  if (!ethers) return say("Blockchain library unavailable — see the message at the top.", "err");
+  if (!window.ethereum) return say("No wallet found. Install MetaMask to mint.", "err");
+  if (!addr) return say("Load a contract address first.", "err");
+  try{
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    await provider.send("eth_requestAccounts", []);
+    const n = net();
+    const chain = await provider.send("eth_chainId", []);
+    if (chain.toLowerCase() !== n.chainId.toLowerCase()){
+      try { await provider.send("wallet_switchEthereumChain", [{chainId:n.chainId}]); }
+      catch { await provider.send("wallet_addEthereumChain", [n]); }
+    }
+    signer = await provider.getSigner();
+    contract = new ethers.Contract(addr, ABI, signer);
+    const a = await signer.getAddress();
+    $("connect").textContent = $("connect2").textContent = a.slice(0,6) + "…" + a.slice(-4);
+    say("Connected on " + n.chainName + ".", "good");
+    refreshActions();
+  } catch(e){ say(reason(e), "err"); }
+}
+$("connect").onclick = connect;
+$("connect2").onclick = connect;
+
+/* Contract errors arrive as selectors; translate the actionable ones. */
+function reason(e){
+  const s = JSON.stringify(e?.info ?? e?.message ?? e ?? "");
+  if (/SoldOut/.test(s))      return "Every piece is minted. Switch to Forge.";
+  if (/WrongFee/.test(s))     return "The fee must be exact. Press Load contract again to re-read it.";
+  if (/WalletLimit/.test(s))  return "This wallet has minted its limit.";
+  if (/DuplicateArt/.test(s)) return "This exact drawing already exists. Change a pixel.";
+  if (/MalformedArt/.test(s)) return "The chain rejected this drawing's detail level.";
+  if (/NotHolder/.test(s))    return "You don't own both of those tokens.";
+  if (/SameToken/.test(s))    return "Pick two different tokens.";
+  if (/Cooling/.test(s))      return "That piece changed hands recently. Forging unlocks 10 minutes after a transfer.";
+  if (/SupplyFloor/.test(s))  return "Supply has reached the floor. No more forging.";
+  if (/ForgeClosed/.test(s))  return "Forging opens once the mint sells out.";
+  if (/insufficient funds/i.test(s)) return "Not enough ETH for the fee and gas.";
+  if (/user rejected|ACTION_REJECTED/i.test(s)) return "Cancelled.";
+  return "Transaction failed. " + (e?.shortMessage ?? "");
+}
+
+async function send(label, fn){
+  try{
+    say(label + "… confirm in your wallet.");
+    const tx = await fn();
+    say(label + "… waiting for the chain.");
+    const r = await tx.wait();
+    statusEl.innerHTML = `Done. <a href="${net().blockExplorerUrls[0]}/tx/${r.hash}" target="_blank" rel="noopener">View transaction</a>`;
+    statusEl.className = "status good";
+    await readState();
+  } catch(e){ say(reason(e), "err"); }
+}
+const palArg = () => PALETTE.map(c => "0x" + c.replace("#","").toUpperCase());
+$("mint").onclick = () => send("Minting", () => contract.mint(palArg(), toHex(encodeArt(px)), {value:fees.mint}));
+$("forge").onclick = () => send("Forging", () =>
+  contract.forge($("keepId").value.trim(), $("burnId").value.trim(), palArg(), toHex(encodeArt(px)), {value:fees.forge}));
+$("keepId").oninput = refreshActions;
+$("burnId").oninput = refreshActions;
+
+for (const [btn,pane,other,otherPane] of [
+  ["modeMint","mintPane","modeForge","forgePane"],
+  ["modeForge","forgePane","modeMint","mintPane"]
+]){
+  $(btn).onclick = () => {
+    $(btn).setAttribute("aria-pressed","true");
+    $(other).setAttribute("aria-pressed","false");
+    $(pane).hidden = false; $(otherPane).hidden = true;
+  };
+}
+
+/* Wordmark letters hop in sequence. Spaces are kept as plain text so the
+   animation never stretches the gaps between words. */
+(function(){
+  const el = $("wordmark"), text = "RH PIXEL STUDIO";
+  [...text].forEach((ch, i) => {
+    if (ch === " "){ el.append(" "); return; }
+    const s = document.createElement("span");
+    s.textContent = ch;
+    s.style.animationDelay = (i * 0.06) + "s";
+    el.appendChild(s);
+  });
+})();
+
+/* Day / night toggle. */
+(function(){
+  const btn = $("theme");
+  const label = () => {
+    const night = document.documentElement.dataset.theme === "night";
+    btn.innerHTML = night
+      ? '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3.2"/><path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3.1 3.1l1.1 1.1M11.8 11.8l1.1 1.1M12.9 3.1l-1.1 1.1M4.2 11.8l-1.1 1.1"/></svg> Day'
+      : '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 9.6A6 6 0 016.4 2.5a6 6 0 107.1 7.1z"/></svg> Night';
+  };
+  btn.onclick = () => {
+    const night = document.documentElement.dataset.theme === "night";
+    document.documentElement.dataset.theme = night ? "day" : "night";
+    try { localStorage.setItem("rh_theme", night ? "day" : "night"); } catch(e){}
+    label();
+  };
+  label();
+})();
+
+buildSwatches();
+setColour(colour);
+paintAll();
+if ($("addr").value) say("Address remembered. Press \u201cLoad contract\u201d to connect to it.");
+</script>
+</body>
+</html>
